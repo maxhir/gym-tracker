@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GymTracker - iPhone Preview</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+    
+    /* iPhone frame */
+    .iphone-frame {
+      width: 390px;
+      height: 844px;
+      background: #000;
+      border-radius: 55px;
+      padding: 12px;
+      box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1);
+    }
+    
+    .iphone-screen {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      border-radius: 45px;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .iphone-notch {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 160px;
+      height: 34px;
+      background: #000;
+      border-radius: 0 0 20px 20px;
+      z-index: 100;
+    }
+    
+    .iphone-home-indicator {
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 134px;
+      height: 5px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 3px;
+      z-index: 100;
+    }
+    
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3); }
+      50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.5); }
+    }
+    
+    .glow-pulse { animation: pulse-glow 2s ease-in-out infinite; }
+  </style>
+</head>
+<body class="bg-slate-900 min-h-screen flex items-center justify-center p-8">
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // ============================================
+    // MOCK DATA
+    // ============================================
+    
+    const mockWearableData = {
+      sleep: {
+        totalSleep: 432, // 7h 12m
+        sleepScore: 84,
+        deepSleep: 95,
+        remSleep: 88,
+        efficiency: 91,
+      },
+      recovery: {
+        score: 78,
+        hrvStatus: 'normal',
+        restingHeartRate: 52,
+        readiness: 'moderate',
+      },
+      hrv: {
+        average: 48,
+        trend: 'stable',
+        baseline: 45,
+      },
+      strain: {
+        score: 8.2,
+        dayStrain: 6.5,
+      },
+    };
+
+    const mockDailyRecommendation = {
+      overallReadiness: 78,
+      workoutRecommendation: {
+        shouldTrain: true,
+        reason: "Good recovery and HRV is at baseline. You're primed for a solid push day.",
+        intensity: 'moderate',
+        estimatedPerformance: 85,
+        prOpportunity: {
+          exercise: 'Bench Press',
+          likelihood: 72,
+          targetWeight: 235,
+        },
+        focusAreas: ['chest', 'shoulders', 'triceps'],
+        modifications: [],
+      },
+      nutritionRecommendation: {
+        calories: 2850,
+        protein: 185,
+        carbs: 320,
+        fat: 85,
+        hydration: 3.5,
+        preMealTiming: '60-90 minutes before',
+        preMealSuggestions: [
+          'Oatmeal with banana and honey (60g carbs)',
+          'Rice cakes with peanut butter',
+        ],
+      },
+      recoveryRecommendation: {
+        sleepTarget: 8,
+        activeRecovery: false,
+        suggestedActivities: ['10 min foam rolling post-workout'],
+      },
+    };
+
+    const mockPRPredictions = [
+      {
+        exercise: 'Bench Press',
+        currentPR: 225,
+        predictedPR: 235,
+        predictedDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        confidence: 78,
+        progressionRate: 2.5,
+      },
+      {
+        exercise: 'Squat',
+        currentPR: 315,
+        predictedPR: 325,
+        predictedDate: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000),
+        confidence: 65,
+        progressionRate: 1.8,
+      },
+      {
+        exercise: 'Deadlift',
+        currentPR: 405,
+        predictedPR: 415,
+        predictedDate: new Date(Date.now() + 28 * 24 * 60 * 60 * 1000),
+        confidence: 58,
+        progressionRate: 1.5,
+      },
+    ];
+
+    // ============================================
+    // ICONS (inline SVG components)
+    // ============================================
+    
+    const Icons = {
+      Home: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>,
+      Dumbbell: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h2v12H4zM18 6h2v12h-2zM6 10h2v4H6zM16 10h2v4h-2zM8 11h8v2H8z" /></svg>,
+      History: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+      Chart: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>,
+      Brain: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>,
+      Watch: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+      Settings: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+      ChevronRight: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>,
+      Check: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
+      Plus: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>,
+      Trash: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
+      Trophy: () => <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M5 3h14v2H5zm1 2v3a5 5 0 0010 0V5h2v3a7 7 0 01-6 6.93V18h3v2H9v-2h3v-3.07A7 7 0 016 8V5h2v3a3 3 0 006 0V5H6z"/></svg>,
+      Moon: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>,
+      Heart: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>,
+      Activity: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>,
+      Flame: () => <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 23c-4.97 0-9-3.58-9-8 0-2.52 1.17-4.83 3.15-6.35.54-.41 1.31-.25 1.65.36l.81 1.47c1.09-1.97 2.49-3.7 4.39-4.97.51-.34 1.2-.15 1.48.41l.6 1.22c.74-1.22 1.78-2.26 3.07-3.01.55-.32 1.24-.09 1.53.48.51.98.82 2.06.82 3.19 0 1.41-.76 2.65-1.9 3.31.65.84 1.05 1.89 1.05 3.04 0 4.42-4.03 8-9 8z"/></svg>,
+      Zap: () => <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>,
+      AlertCircle: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+      Utensils: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>,
+      TrendingUp: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>,
+      Calendar: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
+      CheckCircle: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+      XCircle: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+      Refresh: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>,
+    };
+
+    // ============================================
+    // HOME SCREEN
+    // ============================================
+    
+    function HomeScreen({ userData, wearableData, recommendation, onNavigate, onStartExercise }) {
+      const [currentSplit, setCurrentSplit] = useState(userData.splits[0]);
+      
+      const getGreeting = () => {
+        const hour = new Date().getHours();
+        if (hour < 12) return 'Good morning';
+        if (hour < 18) return 'Good afternoon';
+        return 'Good evening';
+      };
+
+      const getCurrentDay = () => {
+        return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
+      };
+
+      const formatSleep = (mins) => `${Math.floor(mins/60)}h ${mins%60}m`;
+      
+      const getReadinessColor = (score) => {
+        if (score >= 80) return 'text-green-400';
+        if (score >= 60) return 'text-yellow-400';
+        return 'text-orange-400';
+      };
+
+      const exercises = userData.exercises[currentSplit] || [];
+
+      return (
+        <div className="space-y-5 pb-4">
+          {/* Welcome */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-orange-400">🔥</span>
+              <span className="text-slate-400 text-sm">{getGreeting()},</span>
+            </div>
+            <h2 className="text-2xl font-bold text-white">{userData.name}</h2>
+            <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-1 mt-2">
+              <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+              <span className="text-blue-300 text-xs font-medium">{getCurrentDay()} • {currentSplit} Day</span>
+            </div>
+          </div>
+
+          {/* AI Daily Brief */}
+          {recommendation && (
+            <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border border-slate-700/50 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Icons.Brain />
+                <span className="text-purple-400 font-semibold text-sm">AI Daily Brief</span>
+              </div>
+              
+              {/* Readiness */}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-slate-500 text-xs">Today's Readiness</p>
+                  <p className={`text-3xl font-bold ${getReadinessColor(recommendation.overallReadiness)}`}>
+                    {recommendation.overallReadiness}%
+                  </p>
+                </div>
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+                  <Icons.CheckCircle />
+                </div>
+              </div>
+
+              {/* Recommendation */}
+              <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 mb-3">
+                <div className="flex items-start gap-2">
+                  <span className="text-green-400 mt-0.5"><Icons.Zap /></span>
+                  <div>
+                    <p className="text-green-300 font-medium text-sm">
+                      Train {recommendation.workoutRecommendation.intensity} today
+                    </p>
+                    <p className="text-slate-400 text-xs mt-1">
+                      {recommendation.workoutRecommendation.reason}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* PR Opportunity */}
+              {recommendation.workoutRecommendation.prOpportunity && (
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-yellow-400">🏆</span>
+                    <span className="text-yellow-300 font-medium text-sm">PR Opportunity!</span>
+                  </div>
+                  <p className="text-slate-300 text-xs">
+                    {recommendation.workoutRecommendation.prOpportunity.exercise}: {' '}
+                    <span className="font-bold text-yellow-400">
+                      {recommendation.workoutRecommendation.prOpportunity.targetWeight} lbs
+                    </span>
+                    {' '}({recommendation.workoutRecommendation.prOpportunity.likelihood}% confidence)
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Wearable Data */}
+          {wearableData && (
+            <div className="grid grid-cols-2 gap-2">
+              <button 
+                onClick={() => onNavigate('wearables')}
+                className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-3 text-left"
+              >
+                <span className="text-indigo-400"><Icons.Moon /></span>
+                <p className="text-slate-500 text-xs mt-1">Sleep</p>
+                <p className="text-white font-bold">{formatSleep(wearableData.sleep.totalSleep)}</p>
+                <p className="text-slate-500 text-xs">Score: {wearableData.sleep.sleepScore}</p>
+              </button>
+              
+              <button 
+                onClick={() => onNavigate('wearables')}
+                className="bg-pink-500/10 border border-pink-500/20 rounded-xl p-3 text-left"
+              >
+                <span className="text-pink-400"><Icons.Heart /></span>
+                <p className="text-slate-500 text-xs mt-1">HRV</p>
+                <p className="text-white font-bold">{wearableData.hrv.average} ms</p>
+                <p className="text-slate-500 text-xs capitalize">{wearableData.hrv.trend}</p>
+              </button>
+              
+              <button 
+                onClick={() => onNavigate('wearables')}
+                className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-left"
+              >
+                <span className="text-emerald-400"><Icons.Activity /></span>
+                <p className="text-slate-500 text-xs mt-1">Recovery</p>
+                <p className="text-white font-bold">{wearableData.recovery.score}%</p>
+                <p className="text-slate-500 text-xs capitalize">{wearableData.recovery.readiness} OK</p>
+              </button>
+              
+              <button 
+                onClick={() => onNavigate('wearables')}
+                className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 text-left"
+              >
+                <span className="text-orange-400"><Icons.Flame /></span>
+                <p className="text-slate-500 text-xs mt-1">Day Strain</p>
+                <p className="text-white font-bold">{wearableData.strain.dayStrain}</p>
+                <p className="text-slate-500 text-xs">of 21 max</p>
+              </button>
+            </div>
+          )}
+
+          {/* Split Selector */}
+          {userData.splits.length > 1 && (
+            <div>
+              <label className="text-slate-400 text-xs mb-1 block">Training Split</label>
+              <select 
+                value={currentSplit}
+                onChange={(e) => setCurrentSplit(e.target.value)}
+                className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-3 py-2.5 text-white text-sm"
+              >
+                {userData.splits.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Today's Exercises */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-yellow-400"><Icons.Zap /></span>
+              <span className="text-white font-semibold">Today's Workout</span>
+            </div>
+            
+            <div className="space-y-2">
+              {exercises.map((ex, i) => (
+                <button
+                  key={ex}
+                  onClick={() => onStartExercise(ex)}
+                  className="w-full bg-slate-800/40 hover:bg-slate-800/60 border border-slate-700/50 hover:border-blue-500/50 rounded-xl p-3 text-left transition-all flex items-center justify-between group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                      <Icons.Dumbbell />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-blue-400 text-xs font-bold">#{i+1}</span>
+                        <span className="text-white font-medium text-sm">{ex}</span>
+                      </div>
+                      {userData.prs[ex] && (
+                        <p className="text-slate-500 text-xs">🏆 PR: <span className="text-yellow-400">{userData.prs[ex]} lbs</span></p>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-slate-600 group-hover:text-blue-400 transition-colors">
+                    <Icons.ChevronRight />
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* PRs */}
+          {Object.keys(userData.prs).filter(k => userData.prs[k] > 0).length > 0 && (
+            <div className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-yellow-400">🏆</span>
+                <span className="text-white font-semibold text-sm">Personal Records</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(userData.prs).filter(([,v]) => v > 0).map(([ex, pr]) => (
+                  <div key={ex} className="bg-slate-800/50 rounded-lg p-3">
+                    <p className="text-slate-500 text-xs">{ex}</p>
+                    <p className="text-xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">{pr} lbs</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ============================================
+    // LOG WORKOUT SCREEN
+    // ============================================
+    
+    function LogScreen({ onAddWorkout }) {
+      const [exercise, setExercise] = useState('');
+      const [sets, setSets] = useState('3');
+      const [reps, setReps] = useState('10');
+      const [weight, setWeight] = useState('');
+      const [showSuccess, setShowSuccess] = useState(false);
+
+      const exercises = ['Bench Press', 'Squat', 'Deadlift', 'Overhead Press', 'Barbell Row', 'Pull-ups', 'Dips', 'Bicep Curls'];
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!exercise || !weight) return;
+        
+        onAddWorkout({ exercise, sets: parseInt(sets), reps: parseInt(reps), weight: parseFloat(weight) });
+        setExercise('');
+        setSets('3');
+        setReps('10');
+        setWeight('');
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 2000);
+      };
+
+      return (
+        <div className="space-y-5">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <Icons.Zap />
+              </div>
+              <h2 className="text-2xl font-bold text-white">Log Workout</h2>
+            </div>
+            <p className="text-slate-400 text-sm">Add exercises to your history</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="text-slate-400 text-xs mb-1 block">Exercise</label>
+              <input
+                type="text"
+                list="exercises"
+                value={exercise}
+                onChange={(e) => setExercise(e.target.value)}
+                placeholder="Type or select"
+                className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500"
+                required
+              />
+              <datalist id="exercises">
+                {exercises.map(ex => <option key={ex} value={ex} />)}
+              </datalist>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-slate-400 text-xs mb-1 block">Sets</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={sets}
+                  onChange={(e) => setSets(e.target.value)}
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-3 py-3 text-white text-center text-xl font-bold"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-slate-400 text-xs mb-1 block">Reps</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={reps}
+                  onChange={(e) => setReps(e.target.value)}
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-3 py-3 text-white text-center text-xl font-bold"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-slate-400 text-xs mb-1 block">Weight</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="2.5"
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  placeholder="lbs"
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-3 py-3 text-white text-center text-xl font-bold placeholder-slate-600"
+                  required
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className={`w-full py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
+                showSuccess 
+                  ? 'bg-green-600 text-white' 
+                  : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
+              }`}
+            >
+              {showSuccess ? (
+                <><Icons.Check /> Added!</>
+              ) : (
+                <><Icons.Plus /> Add Workout</>
+              )}
+            </button>
+          </form>
+        </div>
+      );
+    }
+
+    // ============================================
+    // HISTORY SCREEN
+    // ============================================
+    
+    function HistoryScreen({ workouts, onDelete }) {
+      const formatDate = (d) => {
+        const date = new Date(d);
+        const today = new Date();
+        if (date.toDateString() === today.toDateString()) return 'Today';
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      };
+
+      return (
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <Icons.History />
+              </div>
+              <h2 className="text-2xl font-bold text-white">History</h2>
+            </div>
+            <p className="text-slate-400 text-sm">{workouts.length} workouts logged</p>
+          </div>
+
+          {workouts.length === 0 ? (
+            <div className="text-center py-12 bg-slate-800/30 rounded-xl border border-slate-700/50">
+              <div className="text-slate-600 mb-2"><Icons.Dumbbell /></div>
+              <p className="text-slate-400">No workouts yet</p>
+              <p className="text-slate-500 text-sm">Start logging!</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {workouts.map(w => (
+                <div key={w.id} className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 group">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                        <Icons.Dumbbell />
+                      </div>
+                      <div>
+                        <h3 className="text-white font-semibold">{w.exercise}</h3>
+                        <div className="flex items-center gap-1 text-slate-500 text-xs mt-0.5">
+                          <Icons.Calendar />
+                          <span>{formatDate(w.date)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => onDelete(w.id)}
+                      className="text-slate-600 hover:text-red-400 p-1 opacity-0 group-hover:opacity-100 transition-all"
+                    >
+                      <Icons.Trash />
+                    </button>
+                  </div>
+                  <div className="flex gap-2 mt-3 ml-13">
+                    <span className="bg-blue-500/20 text-blue-300 px-2 py-1 rounded text-xs font-medium">{w.sets} sets</span>
+                    <span className="bg-green-500/20 text-green-300 px-2 py-1 rounded text-xs font-medium">{w.reps} reps</span>
+                    <span className="bg-purple-500/20 text-purple-300 px-2 py-1 rounded text-xs font-medium">{w.weight} lbs</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ============================================
+    // AI INSIGHTS SCREEN
+    // ============================================
+    
+    function InsightsScreen({ predictions }) {
+      const formatDate = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+      return (
+        <div className="space-y-5">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                <Icons.Brain />
+              </div>
+              <h2 className="text-2xl font-bold text-white">AI Insights</h2>
+            </div>
+            <p className="text-slate-400 text-sm">PR predictions & analysis</p>
+          </div>
+
+          <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4">
+            <p className="text-purple-300 text-sm">
+              <span className="font-semibold">How it works:</span> We analyze your training history, recovery data, and progression rate to predict when you'll hit your next PR.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {predictions.map((p, i) => (
+              <div key={i} className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-white font-semibold">{p.exercise}</h3>
+                  <span className={`text-xs font-medium px-2 py-1 rounded ${
+                    p.confidence >= 70 ? 'bg-green-500/20 text-green-300' :
+                    p.confidence >= 50 ? 'bg-yellow-500/20 text-yellow-300' :
+                    'bg-slate-500/20 text-slate-300'
+                  }`}>
+                    {p.confidence}% confidence
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-slate-500 text-xs">Current PR</p>
+                    <p className="text-white text-xl font-bold">{p.currentPR} lbs</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 text-xs">Predicted PR</p>
+                    <p className="text-green-400 text-xl font-bold">{p.predictedPR} lbs</p>
+                  </div>
+                </div>
+                
+                <div className="mt-3 pt-3 border-t border-slate-700/50">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-400">Estimated date</span>
+                    <span className="text-white font-medium">{formatDate(p.predictedDate)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm mt-1">
+                    <span className="text-slate-400">Progression rate</span>
+                    <span className="text-blue-400 font-medium">+{p.progressionRate} lbs/week</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================
+    // WEARABLES SCREEN
+    // ============================================
+    
+    function WearablesScreen({ wearableData, onSync }) {
+      const [isSyncing, setIsSyncing] = useState(false);
+      const [connected, setConnected] = useState(['oura']);
+
+      const devices = [
+        { id: 'oura', name: 'Oura Ring', icon: '💍', color: 'from-purple-500 to-indigo-600' },
+        { id: 'whoop', name: 'WHOOP', icon: '⌚', color: 'from-red-500 to-orange-600' },
+        { id: 'apple', name: 'Apple Watch', icon: '⌚', color: 'from-gray-500 to-gray-700' },
+        { id: 'garmin', name: 'Garmin', icon: '⌚', color: 'from-blue-500 to-cyan-600' },
+      ];
+
+      const handleSync = async () => {
+        setIsSyncing(true);
+        await new Promise(r => setTimeout(r, 1500));
+        setIsSyncing(false);
+      };
+
+      const toggleConnect = (id) => {
+        setConnected(c => c.includes(id) ? c.filter(x => x !== id) : [...c, id]);
+      };
+
+      return (
+        <div className="space-y-5">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <Icons.Watch />
+              </div>
+              <h2 className="text-2xl font-bold text-white">Wearables</h2>
+            </div>
+            <p className="text-slate-400 text-sm">Connect for personalized insights</p>
+          </div>
+
+          {connected.length > 0 && (
+            <button
+              onClick={handleSync}
+              disabled={isSyncing}
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2"
+            >
+              <span className={isSyncing ? 'animate-spin' : ''}><Icons.Refresh /></span>
+              {isSyncing ? 'Syncing...' : 'Sync All Devices'}
+            </button>
+          )}
+
+          <div className="space-y-2">
+            {devices.map(d => {
+              const isConnected = connected.includes(d.id);
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => toggleConnect(d.id)}
+                  className={`w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between ${
+                    isConnected 
+                      ? 'bg-slate-800/60 border-green-500/30' 
+                      : 'bg-slate-800/30 border-slate-700/50 hover:border-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 bg-gradient-to-br ${d.color} rounded-xl flex items-center justify-center text-xl ${!isConnected && 'opacity-50'}`}>
+                      {d.icon}
+                    </div>
+                    <div>
+                      <h4 className="text-white font-medium">{d.name}</h4>
+                      <p className="text-slate-500 text-xs">
+                        {isConnected ? 'Connected • Last synced 30m ago' : 'Tap to connect'}
+                      </p>
+                    </div>
+                  </div>
+                  {isConnected ? (
+                    <span className="text-green-400"><Icons.CheckCircle /></span>
+                  ) : (
+                    <span className="text-slate-600"><Icons.ChevronRight /></span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Data Preview */}
+          {wearableData && (
+            <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4">
+              <h3 className="text-white font-semibold mb-3">Today's Data</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Sleep Score</span>
+                  <span className="text-white font-medium">{wearableData.sleep.sleepScore}/100</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">HRV Average</span>
+                  <span className="text-white font-medium">{wearableData.hrv.average} ms</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Recovery Score</span>
+                  <span className="text-white font-medium">{wearableData.recovery.score}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Resting HR</span>
+                  <span className="text-white font-medium">{wearableData.recovery.restingHeartRate} bpm</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ============================================
+    // NUTRITION SCREEN
+    // ============================================
+    
+    function NutritionScreen({ recommendation }) {
+      const [water, setWater] = useState(4);
+      const macros = recommendation?.nutritionRecommendation || {
+        calories: 2800,
+        protein: 180,
+        carbs: 300,
+        fat: 80,
+      };
+
+      return (
+        <div className="space-y-5">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center">
+                <Icons.Utensils />
+              </div>
+              <h2 className="text-2xl font-bold text-white">Nutrition</h2>
+            </div>
+            <p className="text-slate-400 text-sm">Today's targets based on your recovery</p>
+          </div>
+
+          {/* Macro Targets */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4">
+              <p className="text-orange-400 text-xs font-medium">Calories</p>
+              <p className="text-white text-2xl font-bold">{macros.calories}</p>
+              <p className="text-slate-500 text-xs">kcal target</p>
+            </div>
+            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+              <p className="text-red-400 text-xs font-medium">Protein</p>
+              <p className="text-white text-2xl font-bold">{macros.protein}g</p>
+              <p className="text-slate-500 text-xs">1g per lb bodyweight</p>
+            </div>
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+              <p className="text-blue-400 text-xs font-medium">Carbs</p>
+              <p className="text-white text-2xl font-bold">{macros.carbs}g</p>
+              <p className="text-slate-500 text-xs">training day</p>
+            </div>
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
+              <p className="text-yellow-400 text-xs font-medium">Fat</p>
+              <p className="text-white text-2xl font-bold">{macros.fat}g</p>
+              <p className="text-slate-500 text-xs">healthy fats</p>
+            </div>
+          </div>
+
+          {/* Water Tracker */}
+          <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-cyan-400 font-medium">Water Intake</p>
+              <p className="text-white font-bold">{water} / 8 glasses</p>
+            </div>
+            <div className="flex gap-1">
+              {[...Array(8)].map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setWater(i + 1)}
+                  className={`flex-1 h-8 rounded ${i < water ? 'bg-cyan-500' : 'bg-slate-700'} transition-all`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Pre-Workout Meal */}
+          <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4">
+            <h3 className="text-white font-semibold mb-2">Pre-Workout Meal Ideas</h3>
+            <p className="text-slate-500 text-xs mb-3">60-90 minutes before training</p>
+            <div className="space-y-2">
+              <div className="bg-slate-700/30 rounded-lg p-3">
+                <p className="text-white text-sm">Oatmeal with banana & honey</p>
+                <p className="text-slate-500 text-xs">60g carbs, 10g protein</p>
+              </div>
+              <div className="bg-slate-700/30 rounded-lg p-3">
+                <p className="text-white text-sm">Rice cakes with peanut butter</p>
+                <p className="text-slate-500 text-xs">50g carbs, 8g protein</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================
+    // SETTINGS SCREEN
+    // ============================================
+    
+    function SettingsScreen({ userData }) {
+      return (
+        <div className="space-y-5">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 bg-gradient-to-br from-slate-600 to-slate-700 rounded-xl flex items-center justify-center">
+                <Icons.Settings />
+              </div>
+              <h2 className="text-2xl font-bold text-white">Settings</h2>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {[
+              { label: 'Profile', value: userData.name },
+              { label: 'Units', value: 'Imperial (lbs)' },
+              { label: 'Notifications', value: 'Enabled' },
+              { label: 'Rest Timer', value: '90 seconds' },
+              { label: 'Export Data', value: '' },
+              { label: 'Privacy Policy', value: '' },
+              { label: 'About', value: 'v1.0.0' },
+            ].map((item, i) => (
+              <button key={i} className="w-full bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 flex items-center justify-between">
+                <span className="text-white">{item.label}</span>
+                <div className="flex items-center gap-2">
+                  {item.value && <span className="text-slate-500 text-sm">{item.value}</span>}
+                  <span className="text-slate-600"><Icons.ChevronRight /></span>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <button className="w-full bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl p-4 font-medium">
+            Sign Out
+          </button>
+        </div>
+      );
+    }
+
+    // ============================================
+    // MAIN APP
+    // ============================================
+    
+    function App() {
+      const [activeTab, setActiveTab] = useState('home');
+      const [workouts, setWorkouts] = useState([
+        { id: '1', exercise: 'Bench Press', sets: 4, reps: 8, weight: 185, date: new Date().toISOString() },
+        { id: '2', exercise: 'Incline Dumbbell Press', sets: 3, reps: 10, weight: 65, date: new Date(Date.now() - 86400000).toISOString() },
+      ]);
+
+      const userData = {
+        name: 'Max',
+        splits: ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms'],
+        exercises: {
+          'Chest': ['Bench Press', 'Incline Dumbbell Press', 'Cable Flyes', 'Dips'],
+          'Back': ['Deadlift', 'Pull-ups', 'Barbell Row', 'Lat Pulldown'],
+          'Legs': ['Squat', 'Leg Press', 'Romanian Deadlift', 'Leg Curl'],
+          'Shoulders': ['Overhead Press', 'Lateral Raises', 'Face Pulls'],
+          'Arms': ['Barbell Curl', 'Tricep Dips', 'Hammer Curls'],
+        },
+        prs: {
+          'Bench Press': 225,
+          'Squat': 315,
+          'Deadlift': 405,
+          'Overhead Press': 155,
+        },
+      };
+
+      const handleAddWorkout = (w) => {
+        setWorkouts([{ ...w, id: Date.now().toString(), date: new Date().toISOString() }, ...workouts]);
+      };
+
+      const handleDeleteWorkout = (id) => {
+        setWorkouts(workouts.filter(w => w.id !== id));
+      };
+
+      const tabs = [
+        { id: 'home', icon: Icons.Home, label: 'Home' },
+        { id: 'log', icon: Icons.Dumbbell, label: 'Log' },
+        { id: 'history', icon: Icons.History, label: 'History' },
+        { id: 'insights', icon: Icons.Brain, label: 'AI' },
+        { id: 'wearables', icon: Icons.Watch, label: 'Devices' },
+      ];
+
+      const renderScreen = () => {
+        switch (activeTab) {
+          case 'home':
+            return <HomeScreen 
+              userData={userData} 
+              wearableData={mockWearableData} 
+              recommendation={mockDailyRecommendation}
+              onNavigate={setActiveTab}
+              onStartExercise={() => setActiveTab('log')}
+            />;
+          case 'log':
+            return <LogScreen onAddWorkout={handleAddWorkout} />;
+          case 'history':
+            return <HistoryScreen workouts={workouts} onDelete={handleDeleteWorkout} />;
+          case 'insights':
+            return <InsightsScreen predictions={mockPRPredictions} />;
+          case 'wearables':
+            return <WearablesScreen wearableData={mockWearableData} />;
+          case 'nutrition':
+            return <NutritionScreen recommendation={mockDailyRecommendation} />;
+          case 'settings':
+            return <SettingsScreen userData={userData} />;
+          default:
+            return null;
+        }
+      };
+
+      return (
+        <div className="flex gap-8 items-start">
+          {/* iPhone Frame */}
+          <div className="iphone-frame">
+            <div className="iphone-screen flex flex-col">
+              <div className="iphone-notch"></div>
+              <div className="iphone-home-indicator"></div>
+              
+              {/* Status Bar */}
+              <div className="h-12 px-6 flex items-end justify-between text-white text-xs font-medium pb-1">
+                <span>9:41</span>
+                <div className="flex items-center gap-1">
+                  <span>📶</span>
+                  <span>🔋</span>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto scrollbar-hide px-4 pt-2 pb-20">
+                {renderScreen()}
+              </div>
+
+              {/* Tab Bar */}
+              <div className="absolute bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 px-2 pb-8 pt-2">
+                <div className="flex justify-around">
+                  {tabs.map(t => {
+                    const Icon = t.icon;
+                    const isActive = activeTab === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => setActiveTab(t.id)}
+                        className={`flex flex-col items-center gap-1 px-3 py-1 ${isActive ? 'text-blue-400' : 'text-slate-500'}`}
+                      >
+                        <Icon />
+                        <span className="text-xs">{t.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Feature List */}
+          <div className="text-white max-w-md">
+            <h1 className="text-3xl font-bold mb-2">GymTracker</h1>
+            <p className="text-slate-400 mb-6">Complete fitness tracking with AI-powered insights</p>
+            
+            <div className="space-y-4">
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                <h3 className="font-semibold text-blue-400 mb-2">🎯 Smart Recommendations</h3>
+                <p className="text-slate-400 text-sm">AI analyzes your recovery data to recommend optimal training intensity and identifies PR opportunities.</p>
+              </div>
+              
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                <h3 className="font-semibold text-purple-400 mb-2">⌚ Wearable Integration</h3>
+                <p className="text-slate-400 text-sm">Connect Oura Ring, WHOOP, Apple Watch, or Garmin for sleep, HRV, and recovery tracking.</p>
+              </div>
+              
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                <h3 className="font-semibold text-green-400 mb-2">📈 PR Predictions</h3>
+                <p className="text-slate-400 text-sm">Machine learning predicts when you'll hit your next PR based on progression rate and recovery.</p>
+              </div>
+              
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                <h3 className="font-semibold text-orange-400 mb-2">🍎 Nutrition Guidance</h3>
+                <p className="text-slate-400 text-sm">Personalized macro targets and pre/post workout meal suggestions based on training day.</p>
+              </div>
+              
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                <h3 className="font-semibold text-pink-400 mb-2">🏋️ Workout Logging</h3>
+                <p className="text-slate-400 text-sm">Quick exercise logging with automatic PR detection and progress tracking.</p>
+              </div>
+            </div>
+            
+            <p className="text-slate-500 text-sm mt-6">
+              Try the different tabs in the iPhone preview →
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
